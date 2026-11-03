@@ -5,3 +5,7 @@ cache/corpCode.xml
 __pycache__/
 # 아이디어 메모 등 엑셀 파일은 공개하지 않는다
 *.xlsx
+# 인증키를 적어 둔 메모 파일도 올리지 않는다
+*KEY*.txt
+*key*.txt
+*Key*.txt
