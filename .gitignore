@@ -1,0 +1,7 @@
+# 인증키는 절대 올리지 않는다 (GitHub에서는 Secrets의 DART_API_KEY 사용)
+dart_key.txt
+# 회사 고유번호 목록(29MB)은 실행할 때마다 새로 받는다
+cache/corpCode.xml
+__pycache__/
+# 아이디어 메모 등 엑셀 파일은 공개하지 않는다
+*.xlsx

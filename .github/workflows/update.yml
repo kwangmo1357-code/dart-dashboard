@@ -1,0 +1,60 @@
+name: 재무 대시보드 갱신 및 배포
+
+on:
+  schedule:
+    - cron: "17 22 * * *"   # 매일 07:17 KST (UTC 기준 22:17, 한국 −9시간)
+  workflow_dispatch:         # Actions 탭에서 수동 실행
+
+permissions:
+  contents: write   # 갱신된 cache·data.js를 저장소에 다시 저장
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Seoul   # data.js의 '갱신' 시각을 한국 시간으로
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: DART 수집 (새 보고서·지분 공시만 받음, 나머지는 cache 재사용)
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+        run: python collect_dart.py
+
+      - name: 바뀐 cache·data.js를 저장소에 저장
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cache data.js 미매핑_보고서.csv
+          git diff --cached --quiet || git commit -m "데이터 갱신 $(date +%F)"
+          git push
+
+      - name: 배포용 폴더 만들기 (dashboard.html → index.html)
+        run: |
+          mkdir -p _site
+          cp dashboard.html _site/index.html
+          cp data.js _site/data.js
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: update
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

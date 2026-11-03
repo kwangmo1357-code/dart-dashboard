@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DART 재무 대시보드</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --line: #e3e6eb; --ink: #1d2330; --quiet: #6b7280;
+    --accent: #2563eb; --good: 22, 163, 74; --bad: 220, 38, 38;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.5 -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; }
+  header { background: var(--card); border-bottom: 1px solid var(--line); padding: 14px 24px;
+           display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+  header h1 { font-size: 18px; margin: 0; }
+  select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
+  .meta { color: var(--quiet); font-size: 12px; margin-left: auto; }
+  .banner { background: #fff7e6; border-bottom: 1px solid #f5d9a8; color: #8a5a00; padding: 8px 24px; font-size: 13px; }
+  nav { display: flex; gap: 4px; padding: 0 24px; background: var(--card); border-bottom: 1px solid var(--line); overflow-x: auto; }
+  nav button { font: inherit; border: 0; background: none; padding: 12px 14px; cursor: pointer; color: var(--quiet);
+               border-bottom: 2px solid transparent; white-space: nowrap; }
+  nav button.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+  main { padding: 20px 24px 40px; max-width: 1400px; margin: 0 auto; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .kpi .label { color: var(--quiet); font-size: 12px; }
+  .kpi .value { font-size: 22px; font-weight: 700; margin: 2px 0; }
+  .kpi .delta { font-size: 12px; }
+  .up { color: rgb(var(--good)); } .down { color: rgb(var(--bad)); }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .card-head h2 { font-size: 15px; margin: 0; }
+  .toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .toggle button { font: inherit; font-size: 12px; border: 0; background: none; padding: 4px 10px; cursor: pointer; color: var(--quiet); }
+  .toggle button.on { background: #eef2ff; color: var(--ink); font-weight: 600; }
+  .chart-box { position: relative; height: 260px; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th { color: var(--quiet); font-weight: 500; font-size: 12px; background: #fafbfc; position: sticky; top: 0; }
+  th:first-child, td:first-child { text-align: left; position: sticky; left: 0; background: inherit; }
+  tr { background: var(--card); }
+  tr.bold td { font-weight: 700; border-top: 1px solid #c9ced6; }
+  tr.yoy td { font-size: 12px; color: var(--quiet); background: #fafbfc; }
+  tr.yoy td:first-child { padding-left: 24px; }
+  tr.group td { background: #f1f3f6; font-weight: 600; text-align: left; }
+  td.spark { width: 72px; padding: 4px 6px; text-align: center; }
+  th.ind, td.ind { background: #eef2ff; border-left: 2px solid #c7d2fe; font-weight: 600; }
+  .note { color: var(--quiet); font-size: 12px; margin-top: 8px; }
+  .stack { display: grid; gap: 12px; }
+  .sitebar { display: flex; gap: 18px; padding: 7px 24px; background: #1d2330; font-size: 12px; overflow-x: auto; }
+  .sitebar a { color: #c7cdd8; white-space: nowrap; } .sitebar a:first-child { color: #fff; font-weight: 700; margin-right: 8px; }
+  .sitebar a.on { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 24px; background: var(--card); border-bottom: 1px solid var(--line); font-size: 13px; }
+  .toolbar button:disabled { opacity: .4; cursor: default; }
+  .toolbar .link { font: inherit; border: 0; background: none; color: var(--accent); cursor: pointer; }
+  .toolbar .quiet { color: var(--quiet); font-size: 12px; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  .empty { padding: 60px 24px; text-align: center; color: var(--quiet); }
+  @media (max-width: 600px) {
+    header, nav, main, .banner { padding-left: 16px; padding-right: 16px; }
+    .charts { grid-template-columns: 1fr; }
+    .meta { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<!-- 공통 링크 바: 홈·세법·재무제표 대시보드를 한 사이트처럼 오가게 함 -->
+<div class="sitebar">
+  <a href="https://kwangmo1357-code.github.io/">회계·세무 포털</a>
+  <a href="https://kwangmo1357-code.github.io/tax-dashboard/">세법 대시보드</a>
+  <a href="https://kwangmo1357-code.github.io/dart-dashboard/" class="on">재무제표 대시보드</a>
+</div>
+<header>
+  <h1>DART 재무 대시보드</h1>
+  <select id="company"></select>
+  <span class="meta" id="meta"></span>
+</header>
+<div class="banner" id="banner" hidden>
+  샘플 데이터입니다. config.ini에 인증키를 넣고 <b>python collect_dart.py</b>를 실행하면 DART 실제 값으로 바뀝니다.
+</div>
+<nav id="tabs"></nav>
+<div class="toolbar" id="toolbar"></div>
+<main id="main"></main>
+
+<script src="data.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+// ───────── 준비 ─────────
+const D = window.DASH_DATA;
+const TABS = [
+  { id: "summary", label: "요약" },
+  { id: "IS", label: "손익계산서" },
+  { id: "BS", label: "재무상태표" },
+  { id: "CF", label: "현금흐름표" },
+  { id: "ratio", label: "재무비율" },
+  { id: "own", label: "지분·공시" },
+];
+const COLORS = { blue: "#2563eb", green: "#16a34a", amber: "#f59e0b", purple: "#a855f7", red: "#ef4444", sky: "#0ea5e9", gray: "#94a3b8" };
+// unit: 연간/반기/분기, range: 단위별 {from, to} 기간 라벨, mode: 차트별 '절대값'/'비율화'
+const state = { company: 0, tab: "summary", unit: "annual", range: {}, mode: {} };
+let charts = [];
+
+// ───────── 기간 단위와 기간 지정 ─────────
+// step = 1년에 해당하는 칸 수, show = 처음 열었을 때 보여 줄 최근 칸 수
+const UNITS = [
+  { id: "annual", label: "연간", step: 1, show: 99 },
+  { id: "half", label: "반기", step: 2, show: 8 },
+  { id: "quarter", label: "분기", step: 4, show: 12 },
+];
+function fullView(c, unit) {
+  if (c.views && c.views[unit]) return c.views[unit];
+  if (unit !== "annual") return null;
+  // 예전 형식(샘플 데이터 등): 연간 값만 있음
+  return { labels: c.years.map(y => "FY" + y), fs: c.fs_years || [], accounts: c.accounts, yoy: c.yoy, ratios: c.ratios };
+}
+function rangeIdx(labels, unit) {   // 저장된 기간 라벨 → 시작·끝 위치. 없으면 기본값(최근 N칸)
+  const u = UNITS.find(x => x.id === unit), r = state.range[unit] || {};
+  let b = labels.indexOf(r.to), a = labels.indexOf(r.from);
+  if (b < 0) b = labels.length - 1;
+  if (a < 0) a = Math.max(0, b - u.show + 1);
+  return a <= b ? [a, b] : [b, a];
+}
+// 화면 그리기에 쓰는 '현재 보기': 고른 단위의 값을 고른 기간만큼 잘라 낸 것
+function currentView(c) {
+  let unit = state.unit, full = fullView(c, unit);
+  if (!full) { unit = "annual"; full = fullView(c, unit); }
+  const u = UNITS.find(x => x.id === unit), [a, b] = rangeIdx(full.labels, unit);
+  const cut = arr => arr.slice(a, b + 1);
+  const mapObj = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, cut(v)]));
+  const fsMain = full.fs.filter(Boolean).slice(-1)[0] || c.fs_div;
+  return { ...c, unit, step: u.step, full, end: b, labels: cut(full.labels), fs_years: cut(full.fs), fs_div: fsMain,
+           accounts: mapObj(full.accounts), yoy: mapObj(full.yoy),
+           ratios: full.ratios.map(r => ({ ...r, values: cut(r.values) })) };
+}
+function renderToolbar(c) {
+  const bar = document.getElementById("toolbar");
+  if (state.tab === "own") { bar.hidden = true; return; }   // 지분·공시는 날짜 단위라 해당 없음
+  bar.hidden = false;
+  const v = currentView(c), labels = v.full.labels, [a, b] = rangeIdx(labels, v.unit);
+  const opts = sel => labels.map((l, i) => `<option value="${l}" ${i === sel ? "selected" : ""}>${l}</option>`).join("");
+  bar.innerHTML = `<div class="toggle">${UNITS.map(u => `<button data-unit="${u.id}" class="${u.id === v.unit ? "on" : ""}"
+      ${fullView(c, u.id) ? "" : "disabled"}>${u.label}</button>`).join("")}</div>
+    <label>기간 <select id="from">${opts(a)}</select> ~ <select id="to">${opts(b)}</select></label>
+    <button class="link" id="reset">최근 기본값</button>
+    ${v.unit === "annual" ? "" : '<span class="quiet">분기·반기 숫자는 감사가 아닌 검토 기준 · 4분기(하반기) = 연간 − 3분기(반기) 누적</span>'}`;
+  bar.querySelectorAll("[data-unit]").forEach(btn => btn.onclick = () => { state.unit = btn.dataset.unit; render(); });
+  bar.querySelector("#from").onchange = e => { state.range[v.unit] = { from: e.target.value, to: bar.querySelector("#to").value }; render(); };
+  bar.querySelector("#to").onchange = e => { state.range[v.unit] = { from: bar.querySelector("#from").value, to: e.target.value }; render(); };
+  bar.querySelector("#reset").onclick = () => { delete state.range[v.unit]; render(); };
+}
+
+// ───────── 숫자 표시 ─────────
+const EOK = 1e8;   // 원 → 억원
+function fmtAmount(v) {                       // 억원, 음수는 괄호
+  if (v == null) return "–";
+  const s = Math.round(Math.abs(v) / EOK).toLocaleString("ko-KR");
+  return v < 0 ? "(" + s + ")" : s;
+}
+function fmtPct(v, digits = 1) { return v == null ? "–" : v.toFixed(digits) + "%"; }
+function fmtRatio(v, unit) {
+  if (v == null) return "–";
+  return unit === "%" ? v.toFixed(1) + "%" : v.toFixed(2) + (unit === "배" ? "x" : "회");
+}
+
+// ───────── 스파크라인: 숫자 목록 → 작은 막대 SVG ─────────
+function sparkline(values) {
+  const w = 60, h = 22, nums = values.filter(v => v != null);
+  if (!nums.length) return "";
+  const max = Math.max(...nums.map(Math.abs)) || 1;
+  const hasNeg = nums.some(v => v < 0);
+  const base = hasNeg ? h / 2 : h;           // 음수가 있으면 가운데를 0선으로
+  const bw = w / values.length;
+  let bars = "";
+  values.forEach((v, i) => {
+    if (v == null) return;
+    const len = Math.abs(v) / max * (hasNeg ? h / 2 : h);
+    const y = v >= 0 ? base - len : base;
+    bars += `<rect x="${(i * bw + 1).toFixed(1)}" y="${y.toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${Math.max(len, 0.5).toFixed(1)}" fill="${v >= 0 ? COLORS.green : COLORS.red}"/>`;
+  });
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${bars}</svg>`;
+}
+
+// ───────── 히트맵: 행의 중앙값보다 좋으면 초록, 나쁘면 빨강 ─────────
+function median(arr) {
+  const s = arr.filter(v => v != null).sort((a, b) => a - b);
+  if (!s.length) return null;
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+function heatStyle(v, row, better = "high") {
+  if (v == null) return "";
+  const med = median(row);
+  const spread = Math.max(...row.filter(x => x != null).map(x => Math.abs(x - med))) || 1;
+  const diff = v - med;
+  if (Math.abs(diff) < 1e-9) return "";
+  const good = better === "high" ? diff > 0 : diff < 0;
+  const alpha = (0.12 + 0.5 * Math.abs(diff) / spread).toFixed(2);
+  return `background: rgba(var(${good ? "--good" : "--bad"}), ${alpha}); color: var(--ink);`;
+}
+
+// ───────── 화면 틀 ─────────
+function init() {
+  if (!D) {
+    document.getElementById("main").innerHTML =
+      '<div class="empty">data.js가 없습니다. 먼저 <b>python collect_dart.py</b>를 실행하세요.</div>';
+    return;
+  }
+  const sel = document.getElementById("company");
+  sel.innerHTML = D.companies.map((c, i) => `<option value="${i}">${c.name} (${c.stock_code})</option>`).join("");
+  sel.onchange = () => { state.company = +sel.value; render(); };
+  document.getElementById("banner").hidden = !D.sample;
+  document.getElementById("tabs").innerHTML =
+    TABS.map(t => `<button data-tab="${t.id}">${t.label}</button>`).join("");
+  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => { state.tab = b.dataset.tab; render(); });
+  render();
+}
+
+function render() {
+  const c = currentView(D.companies[state.company]);
+  renderToolbar(D.companies[state.company]);
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.tab));
+  document.getElementById("meta").textContent =
+    `${basisText(c)} · 단위 억원 · 갱신 ${D.generated}`;
+  charts.forEach(ch => ch.destroy());
+  charts = [];
+
+  const main = document.getElementById("main");
+  if (state.tab === "summary") {
+    main.innerHTML = kpiHtml(c) + chartGrid(["revenueMix", "margins", "growth"]);
+  } else if (state.tab === "IS") {
+    main.innerHTML = chartGrid(["revenueMix", "margins"]) + statementTable(c, "IS");
+  } else if (state.tab === "BS") {
+    main.innerHTML = chartGrid(["structure"]) + statementTable(c, "BS");
+  } else if (state.tab === "CF") {
+    main.innerHTML = chartGrid(["cashflow"]) + statementTable(c, "CF");
+  } else if (state.tab === "ratio") {
+    main.innerHTML = ratioTable(c);
+  } else {
+    main.innerHTML = ownershipHtml(c);
+  }
+  main.querySelectorAll("canvas[data-chart]").forEach(cv => drawChart(cv, c));
+  main.querySelectorAll(".toggle button").forEach(b => b.onclick = () => {
+    state.mode[b.dataset.chart] = b.dataset.mode; render();
+  });
+}
+
+// ───────── 요약 카드 ─────────
+function kpiHtml(c) {
+  // 고른 기간의 마지막 칸 기준. 비교는 전년 같은 기간(step칸 앞) — 잘린 범위 밖이어도 전체 값에서 찾는다
+  const i = c.end, F = c.full, last = c.labels[c.labels.length - 1];
+  const ratio = name => F.ratios.find(r => r.name === name);
+  const pp = name => { const v = ratio(name).values; return i >= c.step && v[i] != null && v[i - c.step] != null ? v[i] - v[i - c.step] : null; };
+  const cards = [
+    { label: "매출액", value: fmtAmount(F.accounts["매출액"][i]) + "억", d: F.yoy["매출액"][i], kind: "pct" },
+    { label: "영업이익", value: fmtAmount(F.accounts["영업이익"][i]) + "억", d: F.yoy["영업이익"][i], kind: "pct" },
+    { label: "영업이익률", value: fmtPct(ratio("영업이익률").values[i]), d: pp("영업이익률"), kind: "pp" },
+    { label: "ROE", value: fmtPct(ratio("ROE").values[i]), d: pp("ROE"), kind: "pp", ttm: ratio("ROE").ttm },
+    { label: "부채비율", value: fmtPct(ratio("부채비율").values[i]), d: pp("부채비율"), kind: "pp", lowGood: true },
+  ];
+  const vs = c.step > 1 ? "전년 동기 대비" : "전년 대비";
+  return `<div class="kpis">${cards.map(k => {
+    let delta = vs + " –";
+    if (k.d != null) {
+      const good = k.lowGood ? k.d < 0 : k.d > 0;
+      const sign = k.d > 0 ? "▲" : k.d < 0 ? "▼" : "";
+      delta = `<span class="${good ? "up" : "down"}">${sign} ${Math.abs(k.d).toFixed(1)}${k.kind === "pct" ? "%" : "%p"}</span> ${vs}`;
+    }
+    // 비율 카드에는 업종 중앙값을 함께 표시 (연간 보기에서 같은 연도일 때만)
+    const med = c.industry && "FY" + c.industry.year === last ? c.industry.median[k.label] : null;
+    const indLine = k.kind === "pp" && med != null ? `<div class="delta" style="color:var(--quiet)">업종 중앙값 ${fmtPct(med)}</div>` : "";
+    return `<div class="kpi"><div class="label">${last} ${k.label}${k.ttm ? " (최근 1년 TTM)" : ""}</div><div class="value">${k.value}</div><div class="delta">${delta}</div>${indLine}</div>`;
+  }).join("")}</div>`;
+}
+
+// ───────── 연결/별도 기준 표시 ─────────
+const BASIS = { CFS: "연결", OFS: "별도" };
+function yearHeads(c) {   // 대표 기준과 다른 기간에는 라벨 아래 '별도' 등을 작게 표시
+  return c.labels.map((l, i) => {
+    const b = (c.fs_years || [])[i];
+    const tag = b && b !== c.fs_div ? `<br><span style="color:#b45309">${BASIS[b]}</span>` : "";
+    return `<th>${l}${tag}</th>`;
+  }).join("");
+}
+function basisText(c) {
+  const other = c.labels.filter((l, i) => (c.fs_years || [])[i] && c.fs_years[i] !== c.fs_div);
+  const main = BASIS[c.fs_div];
+  return other.length ? `${main} (${other[0]}~${other[other.length - 1]} ${BASIS[c.fs_div === "CFS" ? "OFS" : "CFS"]})` : main;
+}
+
+// ───────── 재무제표 표 ─────────
+function statementTable(c, sj) {
+  const head = `<tr><th>계정 (억원)</th><th>추이</th>${yearHeads(c)}</tr>`;
+  let body = "", hidden = 0;
+  D.layout[sj].forEach(row => {
+    const vals = c.accounts[row.name];
+    if (!vals || vals.every(v => v == null)) { hidden++; return; }   // 값이 하나도 없는 계정은 숨김
+    body += `<tr class="${row.bold ? "bold" : ""}"><td>${row.name}</td><td class="spark">${sparkline(vals)}</td>` +
+            vals.map(v => `<td>${fmtAmount(v)}</td>`).join("") + "</tr>";
+    if (row.bold) {
+      const g = c.yoy[row.name];
+      body += `<tr class="yoy"><td>${c.step > 1 ? "전년 동기 대비" : "전년 대비"} 성장률</td><td></td>` +
+              g.map(v => `<td style="${heatStyle(v, g)}">${fmtPct(v)}</td>`).join("") + "</tr>";
+    }
+  });
+  const note = hidden ? `<div class="note">값이 없는 계정 ${hidden}개는 숨겼습니다. 숨겨진 계정은 account_map.csv에서 매핑을 추가하면 나타납니다.</div>` : "";
+  return `<div class="card"><div class="table-wrap"><table>${head}${body}</table></div>${note}</div>`;
+}
+
+// ───────── 재무비율 표 ─────────
+function ratioTable(c) {
+  const ind = c.industry;   // 업종 중앙값 (collect_dart.py에서 peers mode = auto일 때만 있음)
+  const indHead = ind ? `<th class="ind">업종 중앙값<br>FY${ind.year} 연간</th>` : "";
+  const n = c.labels.length, cols = n + 2 + (ind ? 1 : 0);
+  const head = `<tr><th>비율</th><th>추이</th>${yearHeads(c)}${indHead}</tr>`;
+  let body = "", group = "";
+  c.ratios.forEach(r => {
+    if (r.group !== group) { group = r.group; body += `<tr class="group"><td colspan="${cols}">${group}</td></tr>`; }
+    const indCell = ind ? `<td class="ind">${fmtRatio(ind.median[r.name], r.unit)}</td>` : "";
+    if (r.values.every(v => v == null)) {
+      body += `<tr><td>${r.name}</td><td></td><td colspan="${n}" style="text-align:left;color:var(--quiet)">데이터 없음 (필요 계정이 매핑되지 않음)</td>${indCell}</tr>`;
+      return;
+    }
+    const tags = (r.better === "low" ? " 낮을수록 좋음" : "") + (r.ttm ? " 최근 1년 합계(TTM)" : "");
+    body += `<tr><td>${r.name}${tags ? ` <span style="color:var(--quiet);font-size:11px">${tags}</span>` : ""}</td>` +
+            `<td class="spark">${sparkline(r.values)}</td>` +
+            r.values.map(v => `<td style="${heatStyle(v, r.values, r.better)}">${fmtRatio(v, r.unit)}</td>`).join("") +
+            indCell + "</tr>";
+  });
+  const groupLabel = ind && ind.manual ? "직접 지정(config.ini)" : ind ? `업종코드 ${ind.code}* (이 회사 ${ind.full_code})` : "";
+  const peerNote = ind ? `<div class="note">비교 그룹: ${groupLabel} 상장사 ${ind.peers.length}개 —
+      ${ind.peers.map(p => p.name).join(", ")}</div>` : "";
+  return `<div class="card"><div class="table-wrap"><table>${head}${body}</table></div>
+    <div class="note">색: 그 행의 보이는 기간 값 중앙값보다 좋으면 초록, 나쁘면 빨강. 진할수록 중앙값에서 멂.</div>${peerNote}</div>`;
+}
+
+// ───────── 지분·공시 탭 ─────────
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+const dartLink = (no, text) => `<a href="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${esc(no)}" target="_blank" rel="noopener">${esc(text)}</a>`;
+const fmtQty = v => v == null ? "–" : (v < 0 ? "(" + Math.abs(v).toLocaleString("ko-KR") + ")" : v.toLocaleString("ko-KR"));
+function chg(v, digits) {   // 증감: 증가 초록 ▲, 감소 빨강 ▼
+  if (v == null || v === 0) return "–";
+  const s = digits == null ? Math.abs(v).toLocaleString("ko-KR") : Math.abs(v).toFixed(digits);
+  return `<span class="${v > 0 ? "up" : "down"}">${v > 0 ? "▲" : "▼"} ${s}</span>`;
+}
+
+function ownershipHtml(c) {
+  const o = c.ownership;
+  if (!o) return '<div class="card empty">지분·공시 자료가 없습니다. collect_dart.py로 실제 수집을 실행하세요.</div>';
+  const trend = o.holder_trend, lastT = trend[trend.length - 1];
+  const lastMajor = o.major.filter(m => m.type === "일반").slice(-1)[0];
+  const yearAgo = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
+  const recentIns = o.insider.filter(r => r.date >= yearAgo);
+  const net = recentIns.reduce((s, r) => s + (r.qty_chg || 0), 0);
+
+  const kpis = `<div class="kpis">
+    <div class="kpi"><div class="label">최대주주+특수관계인 (FY${lastT ? lastT.year : "–"} 말)</div>
+      <div class="value">${lastT ? fmtPct(lastT.rate, 2) : "–"}</div><div class="delta">사업보고서 기준</div></div>
+    <div class="kpi"><div class="label">최근 5% 보고 (일반)</div>
+      <div class="value">${lastMajor ? fmtPct(lastMajor.rate, 2) : "–"}</div>
+      <div class="delta">${lastMajor ? esc(lastMajor.date) + " · " + esc(lastMajor.reporter) : "보고 없음"}</div></div>
+    <div class="kpi"><div class="label">임원·주요주주 순증감 (최근 1년)</div>
+      <div class="value">${net ? (net > 0 ? "+" : "") + net.toLocaleString("ko-KR") + "주" : "0주"}</div>
+      <div class="delta">보고 ${recentIns.length}건</div></div>
+    <div class="kpi"><div class="label">최근 1년 공시</div>
+      <div class="value">${o.filings.length}${o.filings.length >= 20 ? "+" : ""}건</div><div class="delta">아래 목록 (최근 20건)</div></div>
+  </div>`;
+
+  // 최대주주 및 특수관계인 (최근 사업보고서)
+  const h = o.holders;
+  const holderRows = h ? h.holders.map(x => `<tr><td>${esc(x.name)}</td><td style="text-align:left">${esc(x.relate)}</td>
+      <td>${fmtQty(x.end_qty)}</td><td>${fmtPct(x.begin_rate, 2)}</td><td>${fmtPct(x.end_rate, 2)}</td>
+      <td>${chg(x.end_rate != null && x.begin_rate != null ? x.end_rate - x.begin_rate : null, 2)}</td></tr>`).join("") : "";
+  const holders = `<div class="card"><div class="card-head"><h2>최대주주 및 특수관계인 (FY${h ? h.year : "–"} 사업보고서, 보통주)</h2></div>
+    <div class="table-wrap"><table><tr><th>주주</th><th style="text-align:left">관계</th><th>기말 주식수</th><th>기초 지분율</th><th>기말 지분율</th><th>증감(%p)</th></tr>${holderRows}</table></div></div>`;
+
+  // 5% 대량보유 보고 (최신순)
+  const majorRows = o.major.slice().reverse().slice(0, 15).map(m => `<tr><td>${dartLink(m.rcept_no, m.date)}</td>
+      <td style="text-align:left">${esc(m.reporter)}</td><td style="text-align:center">${m.type === "약식" ? '<span style="color:var(--quiet)">약식</span>' : "일반"}</td>
+      <td>${fmtPct(m.rate, 2)}</td><td>${chg(m.rate_chg, 2)}</td><td>${fmtQty(m.qty)}</td>
+      <td style="text-align:left;white-space:normal;min-width:220px">${esc(m.reason)}</td></tr>`).join("");
+  const major = `<div class="card"><div class="card-head"><h2>주식등의 대량보유상황보고 (5% 룰)</h2></div>
+    <div class="table-wrap"><table><tr><th>보고일</th><th style="text-align:left">보고자</th><th style="text-align:center">구분</th><th>지분율</th><th>증감(%p)</th><th>주식수</th><th style="text-align:left">보고 사유</th></tr>
+    ${majorRows || '<tr><td colspan="7" style="text-align:center;color:var(--quiet)">보고 없음</td></tr>'}</table></div>
+    <div class="note">지분율은 특별관계자 합산. 약식 = 경영 참여 목적이 없는 단순투자. 보고일을 누르면 DART 원문.</div></div>`;
+
+  // 임원·주요주주 소유 보고 (최신순)
+  const insRows = o.insider.slice().reverse().slice(0, 20).map(r => `<tr><td>${dartLink(r.rcept_no, r.date)}</td>
+      <td style="text-align:left">${esc(r.reporter)}</td>
+      <td style="text-align:left">${!r.position || r.position === "-" ? "–"   /* 법인 주주 등 임원이 아닌 보고자 */
+        : esc(r.position) + (r.registered === "비등기임원" ? ' <span style="color:var(--quiet)">(비등기)</span>' : "")}</td>
+      <td style="text-align:left">${r.major && r.major !== "-" ? esc(r.major) : "–"}</td>
+      <td>${chg(r.qty_chg)}</td><td>${fmtQty(r.qty)}</td><td>${fmtPct(r.rate, 2)}</td></tr>`).join("");
+  const insider = `<div class="card"><div class="card-head"><h2>임원·주요주주 특정증권등 소유상황보고</h2></div>
+    <div class="table-wrap"><table><tr><th>보고일</th><th style="text-align:left">보고자</th><th style="text-align:left">직위</th><th style="text-align:left">주요주주</th><th>증감 주식수</th><th>보유 주식수</th><th>지분율</th></tr>
+    ${insRows || '<tr><td colspan="7" style="text-align:center;color:var(--quiet)">보고 없음</td></tr>'}</table></div>
+    <div class="note">본인 지분만(특별관계자 합산 아님). 증감은 직전 보고 대비이며 거래 가격은 API에 없음.</div></div>`;
+
+  // 최근 공시
+  const filingRows = o.filings.map(f => `<tr><td>${esc(f.date)}</td><td style="text-align:left">${dartLink(f.rcept_no, f.title)}</td><td style="text-align:left">${esc(f.filer)}</td></tr>`).join("");
+  const filings = `<div class="card"><div class="card-head"><h2>최근 공시 (1년, 최신 20건)</h2></div>
+    <div class="table-wrap"><table><tr><th>접수일</th><th style="text-align:left">공시 제목</th><th style="text-align:left">제출인</th></tr>${filingRows}</table></div></div>`;
+
+  return kpis + chartGrid(["holderTrend", "insiderMonthly"]) +
+    `<div class="stack">${holders}${major}${insider}${filings}</div>`;
+}
+
+// ───────── 차트 ─────────
+const CHARTS = {
+  holderTrend: { title: "최대주주+특수관계인 지분율 (연말)" },
+  insiderMonthly: { title: "임원·주요주주 월별 순증감 주식수 (최근 24개월, 보고일 기준)" },
+  revenueMix: { title: "매출액 구성", toggle: true },
+  margins: { title: "이익률" },
+  growth: { title: "성장률 (YoY)" },
+  structure: { title: "자산 = 부채 + 자본", toggle: true },
+  cashflow: { title: "현금흐름과 잉여현금흐름" },
+};
+function chartGrid(ids) {
+  return `<div class="charts">${ids.map(id => {
+    const def = CHARTS[id], mode = state.mode[id] || "abs";
+    const toggle = def.toggle ? `<div class="toggle">
+        <button data-chart="${id}" data-mode="abs" class="${mode === "abs" ? "on" : ""}">절대값</button>
+        <button data-chart="${id}" data-mode="pct" class="${mode === "pct" ? "on" : ""}">비율화</button></div>` : "";
+    return `<div class="card"><div class="card-head"><h2>${def.title}</h2>${toggle}</div>
+      <div class="chart-box"><canvas data-chart="${id}"></canvas></div></div>`;
+  }).join("")}</div>`;
+}
+
+function drawChart(canvas, c) {
+  if (!window.Chart) {
+    canvas.parentElement.innerHTML = '<div class="empty">차트 도구(Chart.js)를 불러오지 못했습니다. 인터넷 연결을 확인하세요.</div>';
+    return;
+  }
+  const id = canvas.dataset.chart, pct = state.mode[id] === "pct";
+  const A = c.accounts, labels = c.labels;
+  const eok = arr => arr.map(v => v == null ? null : v / EOK);
+  const share = (arr, base) => arr.map((v, i) => v == null || !base[i] ? null : v / base[i] * 100);
+  const ratio = name => c.ratios.find(r => r.name === name).values;
+  // order: 숫자가 작을수록 위에 그려짐 → 선(0)이 막대(1) 위로 올라옴
+  const bar = (label, data, color, extra = {}) => ({ type: "bar", label, data, backgroundColor: color, order: 1, ...extra });
+  const line = (label, data, color, extra = {}) => ({ type: "line", label, data, borderColor: color, backgroundColor: color, pointRadius: 3, tension: 0.2, order: 0, ...extra });
+  const amountAxis = { max: pct ? 100 : undefined, ticks: { callback: v => v.toLocaleString("ko-KR") + (pct ? "%" : "억") } };
+  let datasets, scales;
+  let chartLabels = labels;
+
+  if (id === "holderTrend") {
+    const t = c.ownership.holder_trend;
+    chartLabels = t.map(x => "FY" + x.year);
+    datasets = [line("최대주주+특수관계인", t.map(x => x.rate), COLORS.blue, { tension: 0 })];   // 지분은 계단식으로 변하므로 곡선 보정 없이
+    scales = { y: { ticks: { callback: v => v + "%" } } };
+  } else if (id === "insiderMonthly") {
+    // 최근 24개월을 'YYYY-MM' 칸으로 만들고, 보고일이 속한 달에 증감 주식수를 더한다
+    const months = [], now = new Date();
+    for (let i = 23; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"));
+    }
+    const sums = Object.fromEntries(months.map(m => [m, 0]));
+    c.ownership.insider.forEach(r => { const m = (r.date || "").slice(0, 7); if (m in sums) sums[m] += r.qty_chg || 0; });
+    chartLabels = months.map(m => m.slice(2).replace("-", "."));
+    const vals = months.map(m => sums[m]);
+    datasets = [bar("순증감 주식수", vals, vals.map(v => v >= 0 ? COLORS.green : COLORS.red))];
+    scales = { y: { ticks: { callback: v => v.toLocaleString("ko-KR") } } };
+  } else if (id === "revenueMix") {
+    const pick = n => pct ? share(A[n], A["매출액"]) : eok(A[n]);
+    datasets = [
+      bar("매출원가", pick("매출원가"), COLORS.purple, { stack: "s" }),
+      bar("판매비와관리비", pick("판매비와관리비"), COLORS.sky, { stack: "s" }),
+      bar("영업이익", pick("영업이익"), COLORS.amber, { stack: "s" }),
+    ];
+    if (!pct) datasets.unshift(line("매출액", eok(A["매출액"]), COLORS.green));
+    scales = { x: { stacked: true }, y: { stacked: true, ...amountAxis } };
+  } else if (id === "margins") {
+    datasets = [
+      // 축 이름을 'r'로 지으면 Chart.js가 방사형 축으로 오해하므로 'pctAxis'로 둔다
+      line("매출총이익률", ratio("매출총이익률"), COLORS.purple, { yAxisID: "pctAxis" }),
+      line("영업이익률", ratio("영업이익률"), COLORS.sky, { yAxisID: "pctAxis" }),
+      line("순이익률", ratio("순이익률"), COLORS.amber, { yAxisID: "pctAxis" }),
+      bar("매출액", eok(A["매출액"]), "rgba(22,163,74,0.55)", { yAxisID: "y" }),
+    ];
+    scales = { y: { position: "left", ticks: { callback: v => v.toLocaleString("ko-KR") + "억" } },
+               pctAxis: { axis: "y", position: "right", grid: { drawOnChartArea: false }, ticks: { callback: v => v + "%" } } };
+  } else if (id === "growth") {
+    datasets = [
+      line("매출액", c.yoy["매출액"], COLORS.green),
+      line("영업이익", c.yoy["영업이익"], COLORS.sky),
+      line("당기순이익", c.yoy["당기순이익"], COLORS.amber),
+    ];
+    scales = { y: { ticks: { callback: v => v + "%" } } };
+  } else if (id === "structure") {
+    const pick = n => pct ? share(A[n], A["자산총계"]) : eok(A[n]);
+    datasets = [
+      bar("부채총계", pick("부채총계"), COLORS.red, { stack: "s" }),
+      bar("자본총계", pick("자본총계"), COLORS.blue, { stack: "s" }),
+    ];
+    scales = { x: { stacked: true }, y: { stacked: true, ...amountAxis } };
+  } else if (id === "cashflow") {
+    datasets = [
+      line("잉여현금흐름", eok(A["잉여현금흐름"]), COLORS.green),
+      bar("영업활동현금흐름", eok(A["영업활동현금흐름"]), COLORS.blue),
+      bar("유형자산 취득", eok(A["유형자산취득"]).map(v => v == null ? null : -Math.abs(v)), COLORS.red),
+    ];
+    scales = { y: { ticks: { callback: v => v.toLocaleString("ko-KR") + "억" } } };
+  }
+
+  charts.push(new Chart(canvas, {
+    data: { labels: chartLabels, datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10 } },
+        tooltip: { callbacks: { label: ctx => {
+          const v = ctx.parsed.y;
+          if (v == null) return `${ctx.dataset.label}: –`;
+          if (id === "insiderMonthly") return `${ctx.dataset.label}: ${v.toLocaleString("ko-KR")}주`;
+          const isPct = ctx.dataset.yAxisID === "pctAxis" || id === "growth" || id === "holderTrend" || pct;
+          return `${ctx.dataset.label}: ${isPct ? v.toFixed(isPct && id === "holderTrend" ? 2 : 1) + "%" : Math.round(v).toLocaleString("ko-KR") + "억"}`;
+        } } },
+      },
+      scales,
+    },
+  }));
+}
+
+init();
+</script>
+</body>
+</html>
